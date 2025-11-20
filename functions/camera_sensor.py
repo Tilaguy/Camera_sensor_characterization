@@ -58,6 +58,8 @@ class Camera_sensor(cv2.VideoCapture):
     return cv2.VideoCapture(self.port)
 
   def __configure_camera_properties(self):
+    self.set(cv2.CAP_PROP_AUTO_EXPOSURE, 1) # manual mode
+
     # Get frame width and height
     self.H = int(self.get(cv2.CAP_PROP_FRAME_HEIGHT))
     self.W = int(self.get(cv2.CAP_PROP_FRAME_WIDTH))

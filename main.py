@@ -18,7 +18,7 @@ parser.add_argument('--camera', '-c', metavar='<camera_ref>',
                     required=True,
                     help='Type of camera you want to characterize.')
 
-parser.add_argument('--test-group', '-t', metavar='<test_number>',
+parser.add_argument('--test', '-t', metavar='<test_number>',
                     action='store', dest='test', choices=[1, 2, 3, 4, 5, 6],
                     required=True, type=int,
                     help='Number of tests you want to run.')
@@ -40,10 +40,10 @@ if __name__=='__main__':
 
   # Create camera obj
   camera = Camera_sensor(ref=args.camera_ref)
-  print(camera.W, camera.H, camera.fps, camera.brightness, camera.exposure )
+  print(camera.W, camera.H, camera.fps, camera.brightness, 2 ** camera.exposure )
 
-  test = test_directory(args.test)
-  params = test(camera)
+  test_cls = test_directory(args.test)
+  params = test_cls(camera, exposure_list=[0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07])
 
   cv2.destroyAllWindows()
 
