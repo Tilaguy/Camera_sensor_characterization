@@ -1,0 +1,7 @@
+cameras:
+  IMX219:
+    resolution: [1280, 720]
+  OAKD_RGB:
+    resolution: [4056, 3040]
+  OAKD_DEPTH:
+    resolution: []
