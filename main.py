@@ -3,6 +3,7 @@ import yaml
 import cv2
 from functions.camera_sensor import Camera_sensor
 from functions.noise_characterization import Noise_characterization
+from functions.response_function import Response_function
 
 parser = argparse.ArgumentParser(prog='Camera_sensor_characterization',
                                  description='Script to run a selected group of tests for a specific camera.')
@@ -27,7 +28,7 @@ def test_directory(test_number):
   index = test_number-1
   func = [
     Noise_characterization,
-    # Response_function,
+    Response_function,
     # Vignetting,
     # Rolling_shutter_timing,
     # Chromatic_aberration,
@@ -43,7 +44,9 @@ if __name__=='__main__':
   print(camera.W, camera.H, camera.fps, camera.brightness, 2 ** camera.exposure )
 
   test_cls = test_directory(args.test)
-  params = test_cls(camera, exposure_list=[0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07])
+  params = test_cls(camera, exposure_list=[0.01,
+                                           0.02, 0.03, 0.04, 0.05, 0.06, 0.07
+                                           ])
 
   cv2.destroyAllWindows()
 

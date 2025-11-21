@@ -7,9 +7,11 @@ from datetime import datetime
 from functions.camera_sensor import Camera_sensor
 
 class Noise_characterization():
-  """This test characterizes the electronic noise of the camera by capturing multiple dark frames at different exposure times with the lens fully covered. The function computes per-pixel temporal statistics (mean and variance) and aggregates them into global metrics, including read noise and dark-signal non-uniformity (DSNU). By analyzing how dark variance behaves across exposure times, the function isolates fixed-pattern noise and temporal noise sources inherent to the sensor. This test provides the fundamental noise parameters required for realistic camera simulation and for correcting downstream flat-field measurements."""
+  """
+  This test characterizes the electronic noise of the camera by capturing multiple dark frames at different exposure times with the lens fully covered. The function computes per-pixel temporal statistics (mean and variance) and aggregates them into global metrics, including read noise and dark-signal non-uniformity (DSNU). By analyzing how dark variance behaves across exposure times, the function isolates fixed-pattern noise and temporal noise sources inherent to the sensor. This test provides the fundamental noise parameters required for realistic camera simulation and for correcting downstream flat-field measurements.
+  """
 
-  def __init__(self, camera:Camera_sensor, num_frames:int=100, exposure_list=[]):
+  def __init__(self, camera:Camera_sensor, num_frames:int=100, exposure_list=[], *args, **kwargs):
     self.cam = camera
     self.N = num_frames
     self.t_array = np.array(sorted(exposure_list), dtype=float)
@@ -17,6 +19,11 @@ class Noise_characterization():
     ev = self.cam.get(cv2.CAP_PROP_EXPOSURE)
     self.exposure = 2 ** ev
     self.D = np.array([])
+
+    self.dark_mean_point = []
+    self.dark_var_point = []
+    self.read_std_dn_point = []
+    self.dsnu_dn_point = []
 
     self.__min_dark_var = None
     self.output_data = {
@@ -54,7 +61,7 @@ class Noise_characterization():
         cv2.destroyAllWindows()
 
         for t in self.t_array:
-         # Convert real exposure time (seconds or ms) into EV
+          # Convert real exposure time (seconds or ms) into EV
           ev = np.log2(t)
 
           # Apply exposure
@@ -72,6 +79,14 @@ class Noise_characterization():
           self.get_data()
           self.run_test()
 
+        dark_mean_data = np.array(self.dark_mean_point)
+        self.output_data["Noise_characterization"]["dark_mean"] = float(np.mean(dark_mean_data))
+        dark_var_data = np.array(self.dark_var_point)
+        self.output_data["Noise_characterization"]["dark_var"] = float(np.mean(dark_var_data))
+        read_std_dn_data = np.array(self.read_std_dn_point)
+        self.output_data["Noise_characterization"]["read_std_dn"] = float(np.mean(read_std_dn_data))
+        dsnu_dn_data = np.array(self.dsnu_dn_point)
+        self.output_data["Noise_characterization"]["dsnu_dn"] = float(np.mean(dsnu_dn_data))
         self.save_data()
         break
       elif key == ord('q') or key == ord('Q'):
@@ -108,16 +123,20 @@ class Noise_characterization():
     # Dark Signal Non-Uniformity
     dsnu_dn = np.sqrt(np.mean((mu - dark_mean) ** 2))
 
+    self.dark_mean_point.append(dark_mean)
+    self.dark_var_point.append(dark_var)
+    self.read_std_dn_point.append(read_std_dn)
+    self.dsnu_dn_point.append(dsnu_dn)
+
     now = datetime.now()
     self.output_data['Noise_characterization']["test"].append({
-          "time": now,
+          "time": now.strftime("%Y-%m-%d %H:%M:%S"),
           "exposure": self.exposure,
           "dark_mean": float(dark_mean),
           "dark_var": float(dark_var),
           "read_std_dn": float(read_std_dn),
           "dsnu_dn": float(dsnu_dn),
         })
-
 
   def save_data(self):
     now = datetime.now()
