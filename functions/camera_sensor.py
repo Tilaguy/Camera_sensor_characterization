@@ -15,14 +15,17 @@ class Camera_sensor(cv2.VideoCapture):
 
     self.__validate_reference(ref)
 
-    if self.ref in ["IMX219", "OAKD_RGB", "OAKD_DEPTH"]:
+    if self.__validate_reference(ref):
       if self.ref == "IMX219":
         super().__init__(self.port)
         self.__configure_imx219()
       elif self.ref == "OAKD_RGB":
-          self.__oakd_rgb_config()
+        self.__oakd_rgb_config()
       elif self.ref == "OAKD_DEPTH":
-          self.__oakd_depth_config()
+        self.__oakd_depth_config()
+      else:
+        super().__init__(self.port)
+        self.__configure_webcam()
     else:
       super().__init__(self.port)
 
@@ -34,13 +37,23 @@ class Camera_sensor(cv2.VideoCapture):
       print(f'{self.ref} is already connected...')
 
   def __validate_reference(self, ref):
+    if ref=='WEBCAM':
+      return True
+
     with open("config/lists.yml") as stream:
       lists = dict(yaml.safe_load(stream))['cameras']
       if ref in lists.keys():
         self.ref = ref
         self.resolution = lists[ref]['resolution']
+        return True
       else:
         raise Exception("Camera not configured")
+
+    return False
+
+  def __configure_webcam(self):
+    print(self.port)
+    return cv2.VideoCapture(self.port)
 
   def __configure_imx219(self):
     # TODO: configuracion e inicializacion de camara RGB para captura de datos y ejecucion de test
