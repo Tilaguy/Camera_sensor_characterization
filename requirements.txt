@@ -3,3 +3,4 @@ PyYAML==6.0.3
 opencv-python>=4.11
 numpy>=2.2
 scikit-learn>=1.6
+screeninfo>=0.8
