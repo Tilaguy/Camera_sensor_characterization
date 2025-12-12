@@ -4,49 +4,24 @@ import time
 import numpy as np
 from datetime import datetime
 
-from functions.camera_sensor import Camera_sensor
+from functions.camera_sensor import Camera_sensor, Camera_test
 
-class Noise_characterization():
+class Noise_characterization(Camera_test):
   """
   This test characterizes the electronic noise of the camera by capturing multiple dark frames at different exposure times with the lens fully covered. The function computes per-pixel temporal statistics (mean and variance) and aggregates them into global metrics, including read noise and dark-signal non-uniformity (DSNU). By analyzing how dark variance behaves across exposure times, the function isolates fixed-pattern noise and temporal noise sources inherent to the sensor. This test provides the fundamental noise parameters required for realistic camera simulation and for correcting downstream flat-field measurements.
   """
 
   def __init__(self, camera:Camera_sensor, num_frames:int=100, exposure_list=[], *args, **kwargs):
-    self.cam = camera
-    self.N = num_frames
+    super().__init__(camera, num_frames)
     self.t_array = np.array(sorted(exposure_list), dtype=float)
 
-    ev = self.cam.get(cv2.CAP_PROP_EXPOSURE)
-    self.exposure = 2 ** ev
-    self.D = np.array([])
-
-    self.dark_mean_point = []
-    self.dark_var_point = []
-    self.read_std_dn_point = []
-    self.dsnu_dn_point = []
-
-    self.__min_dark_var = None
-    self.output_data = {
-      "Noise_characterization":{
-        "Camera":{
-          "name": self.cam.ref,
-          "W": self.cam.W,
-          "H": self.cam.H,
-          "FPS": self.cam.fps,
-          "brightness": self.cam.brightness,
-          },
-        "num_frames": self.N,
-        "test":[],
-      }
-    }
-
-    self.setup_configuration()
-
   def setup_configuration(self):
+    print("\nINSTRUCTIONS:")
     print('To perform this test, ensure the lens is completely covered.')
     print('Press [Y] when you are certain the entire image is black.')
     print('Press [Q] to quit.')
 
+    isReady:bool = False
     while True:
       ret, frame = self.cam.read()
       if not ret:
@@ -57,91 +32,92 @@ class Noise_characterization():
       key = cv2.waitKey(1) & 0xFF
 
       if key == ord('y') or key == ord('Y'):
-        print("Test starting...")
-        cv2.destroyAllWindows()
-
-        for t in self.t_array:
-          # Convert real exposure time (seconds or ms) into EV
-          ev = np.log2(t)
-
-          # Apply exposure
-          self.cam.set(cv2.CAP_PROP_EXPOSURE, ev)
-          time.sleep(0.2)
-
-          # Read back EV from camera (driver may clamp or round)
-          ev_applied = self.cam.get(cv2.CAP_PROP_EXPOSURE)
-          t_applied = 2 ** ev_applied
-
-          print(f"Requested: {t:.6f}s | Applied: {t_applied:.6f}s (EV={ev_applied:.3f})")
-
-          self.exposure = t_applied
-
-          self.get_data()
-          self.run_test()
-
-        dark_mean_data = np.array(self.dark_mean_point)
-        self.output_data["Noise_characterization"]["dark_mean"] = float(np.mean(dark_mean_data))
-        dark_var_data = np.array(self.dark_var_point)
-        self.output_data["Noise_characterization"]["dark_var"] = float(np.mean(dark_var_data))
-        read_std_dn_data = np.array(self.read_std_dn_point)
-        self.output_data["Noise_characterization"]["read_std_dn"] = float(np.mean(read_std_dn_data))
-        dsnu_dn_data = np.array(self.dsnu_dn_point)
-        self.output_data["Noise_characterization"]["dsnu_dn"] = float(np.mean(dsnu_dn_data))
-        self.save_data()
+        print("\nThe test is starting,\n⚠️\tDo not move the camera or experimental setup until the test is finished.")
+        isReady = True
         break
       elif key == ord('q') or key == ord('Q'):
-        print("Test cancelled.")
-        cv2.destroyAllWindows()
+        print("\nTest cancelled.")
         break
 
+    cv2.destroyAllWindows()
+    return isReady
+
   def get_data(self):
-    array = []
+    D = []
     for _ in range(self.N):
       ret, frame = self.cam.read()
       if not ret:
-        print("⚠️ Failed to read frame from camera.")
+        print("Failed to read frame from camera.")
         break
 
       d = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-      array.append(d)
-    self.D = np.array(array)
+      D.append(d)
+
+    return D
 
   def run_test(self):
-    # Pixel mean
-    mu = np.mean(self.D, axis=0).astype(np.float32)
-    # Pixel variance
-    var = np.var(self.D, axis=0).astype(np.float32)
-    # Global mean
-    dark_mean = float(np.mean(mu))
-    # Global variance
-    dark_var = float(np.mean(var))
-    if self.__min_dark_var is None or dark_var < self.__min_dark_var:
-      self.__min_dark_var = dark_var
+    dark_mean_point = []
+    dark_var_point = []
+    read_std_dn_point = []
+    dsnu_dn_point = []
 
-    # Read noise
-    read_std_dn = np.sqrt(self.__min_dark_var)
-    # Dark Signal Non-Uniformity
-    dsnu_dn = np.sqrt(np.mean((mu - dark_mean) ** 2))
+    min_dark_var = 0
+    for attempt, exposure in enumerate(self.t_array):
+      # Convert real exposure time (seconds or ms) into EV
+      ev = np.log2(exposure)
+      # Apply exposure
+      self.cam.set(cv2.CAP_PROP_EXPOSURE, ev)
+      time.sleep(0.2)
 
-    self.dark_mean_point.append(dark_mean)
-    self.dark_var_point.append(dark_var)
-    self.read_std_dn_point.append(read_std_dn)
-    self.dsnu_dn_point.append(dsnu_dn)
+      # Read back EV from camera (driver may clamp or round)
+      ev_applied = self.cam.get(cv2.CAP_PROP_EXPOSURE)
+      exposure = 2 ** ev_applied
+      if (ev != ev_applied) and attempt > 0:
+        break
+      print(f"Getting {self.N} frames for exposure time: {exposure} seg ")
 
-    now = datetime.now()
-    self.output_data['Noise_characterization']["test"].append({
+      D = np.array(self.get_data())
+
+      print(f"Analizing data set {attempt + 1}")
+      # Pixel mean
+      mu = np.mean(D, axis=0).astype(np.float32)
+      # Pixel variance
+      var = np.var(D, axis=0).astype(np.float32)
+      # Global mean
+      dark_mean = float(np.mean(mu))
+      # Global variance
+      dark_var = float(np.mean(var))
+      if attempt == 0:
+        min_dark_var = dark_var
+
+      # Read noise
+      read_std_dn = np.sqrt(min_dark_var)
+      # Dark Signal Non-Uniformity
+      dsnu_dn = np.sqrt(np.mean((mu - dark_mean) ** 2))
+
+      now = datetime.now()
+      self.add_to_output(f"test_{attempt}", {
           "time": now.strftime("%Y-%m-%d %H:%M:%S"),
-          "exposure": self.exposure,
+          "exposure": exposure,
           "dark_mean": float(dark_mean),
           "dark_var": float(dark_var),
           "read_std_dn": float(read_std_dn),
           "dsnu_dn": float(dsnu_dn),
         })
+      dark_mean_point.append(dark_mean)
+      dark_var_point.append(dark_var)
+      read_std_dn_point.append(read_std_dn)
+      dsnu_dn_point.append(dsnu_dn)
 
-  def save_data(self):
-    now = datetime.now()
-    formatted_datetime = now.strftime("%Y%m%d%H%M%S")
-    output_filename = f'data/Noise_characterization_{self.cam.ref}_{formatted_datetime}.yaml'
-    with open(output_filename, 'w') as file:
-      yaml.dump(self.output_data, file, default_flow_style=False, sort_keys=False)
+    dark_mean_data = np.array(dark_mean_point)
+    dark_var_data = np.array(dark_var_point)
+    read_std_dn_data = np.array(read_std_dn_point)
+    dsnu_dn_data = np.array(dsnu_dn_point)
+    self.add_to_output("results",{
+      "dark_mean": float(np.mean(dark_mean_data)),
+      "dark_var": float(np.mean(dark_var_data)),
+      "read_std_dn": float(np.mean(read_std_dn_data)),
+      "dsnu_dn": float(np.mean(dsnu_dn_data)),
+    })
+    self.save_data()
 

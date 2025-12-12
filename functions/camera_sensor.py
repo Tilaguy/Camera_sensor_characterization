@@ -1,5 +1,10 @@
 import yaml
 import cv2
+from abc import ABC, abstractmethod
+from typing import ClassVar
+from datetime import datetime
+from typing import ClassVar, Dict, Any, List
+import os
 
 class Camera_sensor(cv2.VideoCapture):
   '''Class to create a camera instance, connect it, and read the image in real time.'''
@@ -52,7 +57,6 @@ class Camera_sensor(cv2.VideoCapture):
     return False
 
   def __configure_webcam(self):
-    print(self.port)
     return cv2.VideoCapture(self.port)
 
   def __configure_imx219(self):
@@ -85,3 +89,63 @@ class Camera_sensor(cv2.VideoCapture):
 
     # Get exposure time (if supported by la cámara)
     self.exposure = self.get(cv2.CAP_PROP_EXPOSURE)
+
+
+
+class Camera_test(ABC):
+  _required_params: ClassVar[list] = ['camera', 'num_frames']
+
+  def __init__(self, camera: Camera_sensor, num_frames: int):
+        self.cam = camera
+        self.N = num_frames
+        self.test_name = self.__class__.__name__
+
+        self.output_data: Dict[str, Any] = {
+          "test_name": self.test_name,
+          "Camera":{
+            "name": self.cam.ref,
+            "W": self.cam.W,
+            "H": self.cam.H,
+            "FPS": self.cam.fps,
+            "brightness": self.cam.brightness,
+            },
+          "num_frames": self.N,
+        }
+        self._validate_params()
+
+  def _validate_params(self) -> None:
+        """Validate the common parameters"""
+        if not isinstance(self.cam, Camera_sensor):
+            raise TypeError("Camera must be an instance of Camera_sensor")
+        if not isinstance(self.N, int) or self.N <= 0:
+            raise ValueError("num_frames must be a positive integer")
+
+  def save_data(self) -> None:
+    '''It saves all the data used and processed while running, in a YAML file.'''
+    now = datetime.now()
+    formatted_datetime = now.strftime("%Y%m%d%H%M%S")
+    output_filename = f'data/{self.test_name}_{self.cam.ref}_{formatted_datetime}.yaml'
+
+    os.makedirs('data', exist_ok=True)
+
+    with open(output_filename, 'w') as file:
+      yaml.dump(self.output_data, file, default_flow_style=False, sort_keys=False)
+
+    print(f"Data saved to: {output_filename}")
+
+  def add_to_output(self, key: str, value: Any):
+    """Helper method to add data to output_data dictionary"""
+    self.output_data[key] = value
+
+  @abstractmethod
+  def setup_configuration(self) -> bool:
+    '''Wait until the user confirms that the experimental setup is ready to run the test.'''
+    pass
+  @abstractmethod
+  def get_data(self) -> List:
+    '''Read and return the current frame read by the camera.'''
+    pass
+  @abstractmethod
+  def run_test(self) -> dict[str, Any]:
+    '''Run the main test algorithm.'''
+    pass
